@@ -43,7 +43,7 @@ POSTER_W = 230
 POSTER_H = 335
 COL_W = (IMG_W - 2 * MARGIN_X - CARD_GAP_X) // 2
 TEXT_W = COL_W - POSTER_W - 55  # right-side padding inside the card
-CARDS_PER_PAGE = 6  # 2 columns x 3 rows, matching the existing images
+CARDS_PER_PAGE = 10  # 2 columns x 5 rows
 
 # Colors sampled from the original images
 COLOR_TOP = (47, 40, 118)        # dark purple
@@ -525,10 +525,13 @@ def generate_images(movies, date_obj, output_dir, font_dir):
     date_label = f"{date_obj.day} {MONTHS_GEN[date_obj.month - 1].upper()}"
     base_name = f"{date_obj.day:02d} {MONTHS_GEN[date_obj.month - 1]}"
 
-    pages = [movies[i:i + CARDS_PER_PAGE] for i in range(0, len(movies), CARDS_PER_PAGE)]
-    if not pages:
+    if not movies:
         print("No movies to render.")
         return []
+
+    total = min(len(movies), 2 * CARDS_PER_PAGE)
+    half = (total + 1) // 2  # ceil division, so first page gets up to one extra
+    pages = [movies[:half], movies[half:total]]
 
     # Load footer icons once
     icon_size = 64
@@ -661,7 +664,11 @@ def main():
         if i < len(movies):
             time.sleep(args.delay)
 
-    generate_images(movies, date_obj, output_dir, font_dir)
+    saved_paths = generate_images(movies, date_obj, output_dir, font_dir)
+
+    from magicinfo import upload_schedule_images
+    upload_schedule_images(saved_paths, date_obj)
+
     print("Done.")
 
 
