@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -27,7 +28,12 @@ def load_config():
         "schedule_name_2": os.getenv("MAGICINFO_SCHEDULE_NAME_2", "Расписание 2"),
         "device_type": os.getenv("MAGICINFO_DEVICE_TYPE", "SPLAYER"),
         "device_type_version": float(os.getenv("MAGICINFO_DEVICE_TYPE_VERSION", "2.0")),
+        "debug": _env_bool("MAGICINFO_DEBUG"),
     }
+
+
+class MagicInfoError(Exception):
+    pass
 
 
 class MagicInfoClient:
@@ -40,38 +46,94 @@ class MagicInfoClient:
         self._schedule_name_2 = config["schedule_name_2"]
         self._device_type = config["device_type"]
         self._device_type_version = config["device_type_version"]
+        self._debug = config["debug"]
+
+    def _request(self, method, path, params=None, json_body=None, data=None, files=None, timeout=30):
+        url = f"{self._base}{path}"
+
+        if self._debug:
+            print(f"[DEBUG] {method} {url}")
+            if params:
+                print(f"[DEBUG]   params: {json.dumps(params, ensure_ascii=False)}")
+            if json_body:
+                print(f"[DEBUG]   body:   {json.dumps(json_body, ensure_ascii=False)}")
+            if data:
+                print(f"[DEBUG]   data:   {json.dumps(data, ensure_ascii=False)}")
+            if files:
+                print(f"[DEBUG]   files:  {list(files.keys())}")
+
+        r = requests.request(
+            method, url, headers=self._headers,
+            params=params, json=json_body, data=data, files=files,
+            timeout=timeout,
+        )
+
+        if self._debug:
+            print(f"[DEBUG]   status: {r.status_code}")
+
+        try:
+            body = r.json()
+        except ValueError:
+            if not r.ok:
+                print(f"[ERROR] {method} {url}")
+                print(f"[ERROR]   HTTP {r.status_code}: {r.text[:500]}")
+                r.raise_for_status()
+            raise MagicInfoError(f"Expected JSON response but got: {r.text[:300]}")
+
+        if self._debug:
+            body_preview = json.dumps(body, ensure_ascii=False, default=str)
+            if len(body_preview) > 2000:
+                body_preview = body_preview[:2000] + "..."
+            print(f"[DEBUG]   response: {body_preview}")
+
+        if r.ok and isinstance(body, dict) and body.get("status") == "Error":
+            code = body.get("errorCode", "?")
+            message = body.get("errorMessage", "unknown error")
+            raise MagicInfoError(
+                f"MagicINFO returned error (code={code}): {message}\n"
+                f"  Method: {method} {url}\n"
+                f"  Body: {json.dumps(json_body, ensure_ascii=False, default=str) if json_body else 'none'}"
+            )
+
+        if not r.ok:
+            raise MagicInfoError(
+                f"HTTP {r.status_code} on {method} {url}:\n{json.dumps(body, ensure_ascii=False, default=str)[:500]}"
+            )
+
+        return body
 
     def _get(self, path, params=None):
-        r = requests.get(f"{self._base}{path}", headers=self._headers,
-                         params=params, timeout=30)
-        r.raise_for_status()
-        return r.json()
+        return self._request("GET", path, params=params)
 
-    def _post(self, path, json=None, data=None, files=None):
-        r = requests.post(f"{self._base}{path}", headers=self._headers,
-                          json=json, data=data, files=files, timeout=60)
-        r.raise_for_status()
-        return r.json()
+    def _post(self, path, json_body=None, data=None, files=None):
+        return self._request("POST", path, json_body=json_body, data=data, files=files, timeout=60)
 
-    def _put(self, path, json=None):
-        r = requests.put(f"{self._base}{path}", headers=self._headers,
-                         json=json, timeout=30)
-        r.raise_for_status()
-        return r.json()
+    def _put(self, path, json_body=None):
+        return self._request("PUT", path, json_body=json_body)
 
     def _resolve_content_group_id(self):
         resp = self._get("/restapi/v1.0/cms/contents/groups")
-        for g in resp.get("items", []):
+        items = resp.get("items", [])
+        for g in items:
             if g.get("groupName") == self._content_group_name:
                 return g.get("groupId")
-        raise RuntimeError(f"Content group '{self._content_group_name}' not found in MagicINFO")
+        available = [g.get("groupName", "?") for g in items]
+        raise MagicInfoError(
+            f"Content group '{self._content_group_name}' not found in MagicINFO.\n"
+            f"  Available content groups: {', '.join(available) if available else '(none)'}"
+        )
 
     def _resolve_schedule_group_id(self):
         resp = self._get("/restapi/v1.0/dms/schedule/contents/groups")
-        for g in resp.get("items", []):
+        items = resp.get("items", [])
+        for g in items:
             if g.get("groupName") == self._schedule_group_name:
                 return g.get("groupId")
-        raise RuntimeError(f"Schedule group '{self._schedule_group_name}' not found in MagicINFO")
+        available = [g.get("groupName", "?") for g in items]
+        raise MagicInfoError(
+            f"Schedule group '{self._schedule_group_name}' not found in MagicINFO.\n"
+            f"  Available schedule groups: {', '.join(available) if available else '(none)'}"
+        )
 
     def _upload_image(self, file_path, group_id):
         with open(file_path, "rb") as f:
@@ -83,12 +145,15 @@ class MagicInfoClient:
         items = resp.get("items", [])
         if items:
             return items[0].get("contentId")
-        raise RuntimeError(f"Failed to upload '{file_path}': no contentId in response")
+        raise MagicInfoError(
+            f"Failed to upload '{file_path}': no contentId in response.\n"
+            f"  Response: {json.dumps(resp, ensure_ascii=False, default=str)[:500]}"
+        )
 
     def _find_schedule(self, name, group_id):
         resp = self._post(
             "/restapi/v1.0/dms/schedule/contents/filter",
-            json={
+            json_body={
                 "searchText": name,
                 "groupId": str(group_id),
                 "groupType": "ALL",
@@ -125,14 +190,13 @@ class MagicInfoClient:
         }
 
     def _create_schedule(self, payload):
-        resp = self._post("/restapi/v1.0/dms/schedule/contents", json=payload)
-        return resp
+        return self._post("/restapi/v1.0/dms/schedule/contents", json_body=payload)
 
     def _update_schedule(self, program_id, payload):
-        self._put(f"/restapi/v1.0/dms/schedule/contents/{program_id}", json=payload)
+        self._put(f"/restapi/v1.0/dms/schedule/contents/{program_id}", json_body=payload)
 
     def _deploy_schedule(self, program_id, payload):
-        self._put(f"/restapi/v1.0/dms/schedule/contents/{program_id}/deploy", json=payload)
+        self._put(f"/restapi/v1.0/dms/schedule/contents/{program_id}/deploy", json_body=payload)
 
     def upload_and_schedule(self, image_path_1, image_path_2, date_obj):
         date_str = date_obj.strftime("%Y-%m-%d")
