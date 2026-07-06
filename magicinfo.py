@@ -69,16 +69,25 @@ class MagicInfoClient:
         )
 
         if self._debug:
-            print(f"[DEBUG]   status: {r.status_code}")
+            ct = r.headers.get("Content-Type", "")
+            print(f"[DEBUG]   status: {r.status_code}  content-type: {ct}")
+            raw = r.text[:1000]
+            if r.text:
+                print(f"[DEBUG]   raw:     {raw}")
 
         try:
             body = r.json()
         except ValueError:
             if not r.ok:
-                print(f"[ERROR] {method} {url}")
-                print(f"[ERROR]   HTTP {r.status_code}: {r.text[:500]}")
+                print(f"[ERROR] {method} {url}  HTTP {r.status_code}: {r.text[:500]}")
                 r.raise_for_status()
-            raise MagicInfoError(f"Expected JSON response but got: {r.text[:300]}")
+            raise MagicInfoError(
+                f"Expected JSON response but got empty body or non-JSON content.\n"
+                f"  Method: {method} {url}\n"
+                f"  Status: {r.status_code}\n"
+                f"  Content-Type: {r.headers.get('Content-Type', 'unknown')}\n"
+                f"  Raw (first 500 chars): {r.text[:500]}"
+            )
 
         if self._debug:
             body_preview = json.dumps(body, ensure_ascii=False, default=str)

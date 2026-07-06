@@ -1,0 +1,68 @@
+PS C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main> py .\make_schedule.py
+Fetching schedule: https://kinominska.by/objects/17?filter__by_date=2026-07-03
+Found 14 movies
+[1/14] Fetching details: https://kinominska.by/events/zveropolis-2
+[2/14] Fetching details: https://kinominska.by/events/dyavol-nosit-prada-2
+[3/14] Fetching details: https://kinominska.by/events/majkl
+[4/14] Fetching details: https://kinominska.by/events/obsessiya
+[5/14] Fetching details: https://kinominska.by/events/proekt-glyadzim-svayo-odno-na-dvoih
+[6/14] Fetching details: https://kinominska.by/events/holop-3
+[7/14] Fetching details: https://kinominska.by/events/den-razoblacheniya
+[8/14] Fetching details: https://kinominska.by/events/tri-bogatyrya-ni-dnya-bez-podviga-3
+[9/14] Fetching details: https://kinominska.by/events/malysh-karatist
+[10/14] Fetching details: https://kinominska.by/events/istoriya-igrushek-5
+[11/14] Fetching details: https://kinominska.by/events/ded-fomich
+[12/14] Fetching details: https://kinominska.by/events/rejs-298
+[13/14] Fetching details: https://kinominska.by/events/demon-skorosti
+[14/14] Fetching details: https://kinominska.by/events/supergyorl
+Saved 03 Июля 1.jpg
+Saved 03 Июля 2.jpg
+
+--- MagicINFO: resolving groups ---
+[DEBUG] GET http://192.168.100.20:7001/MagicInfo/restapi/v1.0/cms/contents/groups
+[DEBUG]   status: 200
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\requests\models.py", line 1116, in json
+    return complexjson.loads(self.text, **kwargs)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\User\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\magicinfo.py", line 75, in _request
+    body = r.json()
+  File "C:\Users\User\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\requests\models.py", line 1120, in json
+    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\make_schedule.py", line 676, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\make_schedule.py", line 670, in main
+    upload_schedule_images(saved_paths, date_obj)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\magicinfo.py", line 250, in upload_schedule_images
+    client.upload_and_schedule(image_paths[0], image_paths[1], date_obj)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\magicinfo.py", line 205, in upload_and_schedule
+    content_group_id = self._resolve_content_group_id()
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\magicinfo.py", line 115, in _resolve_content_group_id
+    resp = self._get("/restapi/v1.0/cms/contents/groups")
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\magicinfo.py", line 106, in _get
+    return self._request("GET", path, params=params)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Downloads\cinema-schedule-main\cinema-schedule-main\magicinfo.py", line 81, in _request
+    raise MagicInfoError(f"Expected JSON response but got: {r.text[:300]}")
+magicinfo.MagicInfoError: Expected JSON response but got:
