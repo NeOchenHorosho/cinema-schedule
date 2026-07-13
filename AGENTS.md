@@ -1,9 +1,15 @@
 # AGENTS.md — cinema-schedule
 
 ## Architecture
-- `make_schedule.py` — main script: scraping + image generation.
+- `make_schedule.py` — main script: image generation + orchestration.
 - `magicinfo.py` — Samsung MagicINFO REST API client for uploading/scheduling images.
-- No framework, no package structure. All functions are module-level.
+- `parsers/` — schedule source parsers (`base.py`, `kinominska.py`, `bycard.py`). Each parser implements `fetch_schedule()` and `fetch_movie_detail()`.
+- No framework. Functions are module-level or class methods on parser classes.
+
+## Parser selection
+- Set `SCHEDULE_PARSER=kinominska` or `SCHEDULE_PARSER=bycard` in `.env`.
+- Defaults to `kinominska` if unset.
+- Each parser loads its own URL constants internally (not configurable via .env).
 
 ## Commands
 - `python make_schedule.py` — generate for tomorrow
@@ -19,10 +25,12 @@
 
 ## Gotchas
 - **Supersampling**: all rendering uses `SCALE = 2`. Layout coordinates are doubled internally, then the image is downscaled via LANCZOS. Keep this in mind when adjusting any pixel values.
-- **Hardcoded target**: `object_id=17` is hardcoded in `fetch_schedule()`. There is no CLI flag to change the cinema.
 - **Font cascade**: looks in `fonts/`, then Windows/Mac/Linux system dirs, then bundled DejaVu. No system font installation needed as long as `fonts/` is present.
 - **Cyrillic filenames**: output files like `27 Июня 1.jpg`. Works on modern systems but worth noting.
 - **Poster cache**: `cache/` stores downloaded posters by remote filename. Stale if the server reuses filenames—delete `cache/` to force re-download.
+- **bycard.by hall info**: hall numbers come from `GET https://abws.bycard.by/api/v2/frame/session/{sid}` (one request per session). `map.hallName` is the field (e.g. "Зал 1.").
+- **bycard.by time param**: the `?time=` parameter on the schedule page is a Unix timestamp for midnight UTC+3 of the target day.
+- **bycard.by session API**: some session IDs from the JSON-LD may return 404 from the session API. The parser logs a warning and sets `hall=None` in that case.
 - **MagicINFO auth**: `POST /MagicInfo/restapi/v2.0/auth` with `{"username":"...","password":"...","grantType":"password"}` returns a JWT. Use it as `api_key` header for all REST API calls.
 - **MagicINFO groups**: schedule groups may be nested — the code walks child groups if the target isn't found at the root level.
 - **MagicINFO DataTables**: list endpoints return `items.data[]` (not bare `items[]`). Both formats are handled. Schedule items use `programName`/`programId`, not `name`/`id`.
@@ -35,5 +43,5 @@
 - **contentType `IMAGE`**: not in the swagger2.json `TTV2ScheduleEventResource` enum but accepted by the server. Same caveat as above.
 - **V2 schedules must be pre-created**: unlike v1 which auto-created schedules, v2 raises an error if the named schedule doesn't exist. Create schedules via the MagicINFO web UI first.
 - **Duration 86399**: event duration is one second short of 24h to avoid overlap with the next day's schedule when `isAllDayPlay: true`.
-- **`MAGICINFO_DEVICE_GROUP_IDS`**: optional `.env` variable (comma-separated group IDs) used by `_republish()`. When unset, an empty `ids` array is sent — the server accepts this.
+- **`MAGICINFO_DEVICE_GROUP_ID_1` / `MAGICINFO_DEVICE_GROUP_ID_2`**: optional `.env` variables — one per schedule page. Each schedule is deployed to its own device group. When unset for a schedule, no device group is assigned (re-publish targets all groups associated with the schedule). Re-publish body is always `{"ids": [...]}`, never `{}`.
 - **`_delete` helper**: defined but unused. Left in place for potential future use.

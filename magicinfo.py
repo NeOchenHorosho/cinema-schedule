@@ -32,7 +32,8 @@ def load_config():
         "schedule_name_2": os.getenv("MAGICINFO_SCHEDULE_NAME_2", "Расписание 2"),
         "device_type": os.getenv("MAGICINFO_DEVICE_TYPE", "LPLAYER"),
         "device_type_version": float(os.getenv("MAGICINFO_DEVICE_TYPE_VERSION", "1.0")),
-        "device_group_ids": os.getenv("MAGICINFO_DEVICE_GROUP_IDS", ""),
+        "device_group_id_1": os.getenv("MAGICINFO_DEVICE_GROUP_ID_1", "").strip(),
+        "device_group_id_2": os.getenv("MAGICINFO_DEVICE_GROUP_ID_2", "").strip(),
     }
 
 
@@ -51,7 +52,8 @@ class MagicInfoClient:
         self._schedule_name_2 = config["schedule_name_2"]
         self._device_type = config["device_type"]
         self._device_type_version = config["device_type_version"]
-        self._device_group_ids = config["device_group_ids"]
+        self._device_group_id_1 = config["device_group_id_1"]
+        self._device_group_id_2 = config["device_group_id_2"]
         self._token = None
 
     def _authenticate(self):
@@ -245,10 +247,10 @@ class MagicInfoClient:
     def _update_program(self, program_id, program_data):
         self._put(f"/restapi/v2.0/dms/content-schedules/{program_id}", json_body=program_data)
 
-    def _republish(self, program_id):
-        ids = {}
-        if self._device_group_ids:
-            ids["ids"] = [g.strip() for g in self._device_group_ids.split(",") if g.strip()]
+    def _republish(self, program_id, device_group_id=None):
+        ids = {"ids": []}
+        if device_group_id:
+            ids["ids"] = [device_group_id]
         self._put(f"/restapi/v2.0/dms/content-schedules/{program_id}/re-publish", json_body=ids)
 
     def _replace_event_for_date(self, program_data, date_str, content_id, content_name):
@@ -317,12 +319,12 @@ class MagicInfoClient:
         logger.info("  Uploaded '%s' -> contentId=%s", image_path_2, content_id_2)
 
         images = [
-            (content_id_1, self._schedule_name_1, Path(image_path_1).stem),
-            (content_id_2, self._schedule_name_2, Path(image_path_2).stem),
+            (content_id_1, self._schedule_name_1, Path(image_path_1).stem, self._device_group_id_1),
+            (content_id_2, self._schedule_name_2, Path(image_path_2).stem, self._device_group_id_2),
         ]
 
         logger.info("--- MagicINFO: scheduling ---")
-        for content_id, schedule_name, image_title in images:
+        for content_id, schedule_name, image_title, device_group_id in images:
             logger.info("  Processing '%s'...", schedule_name)
 
             program_id = self._find_program(schedule_name, schedule_group_id)
@@ -334,10 +336,16 @@ class MagicInfoClient:
 
             program = self._get_program(program_id)
             self._replace_event_for_date(program, date_str, content_id, image_title)
+
+            if device_group_id:
+                program["deviceGroups"] = [
+                    {"groupId": int(device_group_id), "groupName": ""}
+                ]
+
             self._update_program(program_id, program)
             logger.info("    Updated events for %s", date_str)
 
-            self._republish(program_id)
+            self._republish(program_id, device_group_id=device_group_id)
             logger.info("    Re-published")
 
         logger.info("  Done.")
@@ -347,6 +355,10 @@ def upload_schedule_images(image_paths, date_obj):
     config = load_config()
     if config is None:
         logger.info("MagicINFO integration disabled — skipping upload.")
+        return
+
+    if len(image_paths) < 2:
+        logger.warning("Expected 2 images for upload, got %d. Skipping upload.", len(image_paths))
         return
 
     client = MagicInfoClient(config)

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Generate cinema schedule images for kinominska.by/objects/17.
+Generate cinema schedule images from supported cinema schedule sources.
+
+Set SCHEDULE_PARSER in .env to choose the source:
+    kinominska  — kinominska.by (default)
+    bycard      — bycard.by
 
 Usage:
     python make_schedule.py
@@ -11,21 +15,18 @@ Usage:
 import argparse
 import logging
 import os
-import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
 
-logger = logging.getLogger(__name__)
+from parsers import get_parser
 
-BASE_URL = "https://kinominska.by"
-OBJECT_ID = 17
+logger = logging.getLogger(__name__)
 
 # Genitive month names used in the date label, e.g. "27 Июня"
 MONTHS_GEN = [
@@ -157,9 +158,10 @@ def get_font(size, weight="bold", font_dir=None):
         "bold": ["Montserrat-Bold.ttf", "Montserrat-SemiBold.ttf",
                  "arialbd.ttf", "Arial Bold.ttf"],
         "semibold": ["Montserrat-SemiBold.ttf", "Montserrat-Bold.ttf",
-                     "arial.ttf", "Arial.ttf"],
-    }.get(weight, win_candidates["bold"])
-    for name in win_candidates:
+                      "arial.ttf", "Arial.ttf"],
+    }
+    win_list = win_candidates.get(weight, win_candidates["bold"])
+    for name in win_list:
         path = windows_fonts / name
         if path.exists():
             return ImageFont.truetype(str(path), s(size))
@@ -186,120 +188,6 @@ def get_font(size, weight="bold", font_dir=None):
     raise FileNotFoundError(
         "No suitable font found. Please place Montserrat-Bold.ttf in the fonts folder."
     )
-
-
-def fetch_html(session, url):
-    """Fetch HTML with a realistic user agent."""
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.7",
-    }
-    r = session.get(url, headers=headers, timeout=30)
-    r.raise_for_status()
-    return r.text
-
-
-def parse_schedule(html):
-    """Parse the object schedule page into a list of movies with sessions."""
-    soup = BeautifulSoup(html, "html.parser")
-    table = soup.find("table", class_="custom-table")
-    if not table:
-        return []
-
-    movies = []
-    current_head = None
-
-    for child in table.children:
-        name = getattr(child, "name", None)
-        if name == "thead":
-            current_head = child
-        elif name == "tbody" and current_head is not None:
-            a = current_head.find("a", href=re.compile(r"^/events/"))
-            if not a:
-                current_head = None
-                continue
-
-            title = a.get_text(strip=True)
-            href = a["href"]
-            slug = href.strip("/").split("/")[-1]
-
-            sessions = []
-            for div in child.select(".widgets-wrapper > div"):
-                if "disabled_click" in div.get("class", []):
-                    continue
-                sess_a = div.find("a", href=True)
-                if not sess_a:
-                    continue
-                spans = sess_a.find_all("span", class_="button-text")
-                if not spans:
-                    continue
-
-                time_str = spans[0].get_text(strip=True)
-                fmt = spans[1].get_text(strip=True) if len(spans) > 1 else ""
-                hall_text = spans[2].get_text(strip=True) if len(spans) > 2 else ""
-                hall_match = re.search(r"(\d+)", hall_text)
-                hall = int(hall_match.group(1)) if hall_match else None
-
-                sessions.append({"time": time_str, "format": fmt, "hall": hall})
-
-            if sessions:
-                movies.append({
-                    "title": title,
-                    "slug": slug,
-                    "href": href,
-                    "sessions": sessions,
-                })
-            current_head = None
-
-    return movies
-
-
-def parse_movie_detail(html):
-    """Parse a movie detail page for metadata and poster URL."""
-    soup = BeautifulSoup(html, "html.parser")
-    data = {}
-
-    title_el = soup.find("h2", class_="trending-text")
-    data["title"] = title_el.get_text(strip=True) if title_el else ""
-
-    # Poster: prefer the dedicated trailer/poster box, fall back to any event image
-    poster_el = soup.select_one(".trailor-video .img-box img")
-    if not poster_el:
-        poster_el = soup.find("img", src=re.compile(r"/uploads/events/"))
-    poster_url = None
-    if poster_el:
-        poster_url = poster_el.get("src") or poster_el.get("data-src")
-        if poster_url and poster_url.startswith("/"):
-            poster_url = urljoin(BASE_URL, poster_url)
-    data["poster_url"] = poster_url
-
-    # Genres
-    genres = [g.get_text(strip=True) for g in soup.select(".movie-tag li.trending-list a")]
-    data["genres"] = genres
-
-    # Age rating and duration
-    badge = soup.select_one(".text-detail .badge.bg-secondary")
-    data["age"] = badge.get_text(strip=True) if badge else ""
-
-    duration_el = soup.select_one(".text-detail .genres-info")
-    data["duration"] = duration_el.get_text(strip=True) if duration_el else ""
-
-    # Country
-    country = ""
-    for tag in soup.select(".iq-blogtag"):
-        label = tag.find("li", class_="iq-tag-title")
-        if label and "Страна:" in label.get_text():
-            a = tag.find("a", class_="title")
-            if a:
-                country = a.get_text(strip=True)
-                break
-    data["country"] = country
-
-    return data
 
 
 def download_poster(session, url, cache_dir):
@@ -374,7 +262,8 @@ def draw_poster(img, x, y, poster_path, radius=16):
         pimg = pimg.resize((s(POSTER_W), s(POSTER_H)), Image.Resampling.LANCZOS)
         mask = rounded_rectangle_mask((POSTER_W, POSTER_H), radius)
         img.paste(pimg, (s(x), s(y)), mask)
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load poster '%s': %s", poster_path, e)
         placeholder = Image.new("RGB", (s(POSTER_W), s(POSTER_H)), (60, 60, 90))
         mask = rounded_rectangle_mask((POSTER_W, POSTER_H), radius)
         img.paste(placeholder, (s(x), s(y)), mask)
@@ -633,7 +522,7 @@ def parse_date_arg(value):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate cinema schedule images for KinoMinska objects/17."
+        description="Generate cinema schedule images from supported cinema sources."
     )
     parser.add_argument(
         "--date",
@@ -658,8 +547,8 @@ def main():
     parser.add_argument(
         "--delay",
         type=float,
-        default=0.3,
-        help="Seconds to wait between detail-page requests (default: 0.3).",
+        default=1.0,
+        help="Seconds to wait between requests (default: 1.0).",
     )
     args = parser.parse_args()
 
@@ -679,10 +568,11 @@ def main():
 
     session = requests.Session()
 
-    schedule_url = f"{BASE_URL}/objects/{OBJECT_ID}?filter__by_date={date_obj:%Y-%m-%d}"
-    logger.info(f"Fetching schedule: {schedule_url}")
-    html = fetch_html(session, schedule_url)
-    movies = parse_schedule(html)
+    parser_name = os.getenv("SCHEDULE_PARSER", "kinominska")
+    schedule_parser = get_parser(parser_name, delay=args.delay)
+
+    logger.info(f"Using parser: {parser_name}")
+    movies = schedule_parser.fetch_schedule(session, date_obj)
     logger.info(f"Found {len(movies)} movies")
 
     if not movies:
@@ -690,15 +580,20 @@ def main():
         return
 
     for i, movie in enumerate(movies, start=1):
-        detail_url = urljoin(BASE_URL, movie["href"])
-        logger.info(f"[{i}/{len(movies)}] Fetching details: {detail_url}")
-        detail_html = fetch_html(session, detail_url)
-        detail = parse_movie_detail(detail_html)
-        movie.update(detail)
+        logger.info(f"[{i}/{len(movies)}] Fetching details for: {movie['title']}")
+        try:
+            detail = schedule_parser.fetch_movie_detail(session, movie["href"])
+            movie.update(detail)
+        except Exception as e:
+            logger.error("Failed to fetch details for '%s': %s", movie["title"], e)
 
-        if detail.get("poster_url"):
-            poster_path = download_poster(session, detail["poster_url"], cache_dir)
-            movie["poster_path"] = poster_path
+        poster_url = movie.get("poster_url")
+        if poster_url:
+            try:
+                poster_path = download_poster(session, poster_url, cache_dir)
+                movie["poster_path"] = poster_path
+            except Exception as e:
+                logger.warning("Failed to download poster for '%s': %s", movie["title"], e)
 
         if i < len(movies):
             time.sleep(args.delay)
@@ -706,7 +601,10 @@ def main():
     saved_paths = generate_images(movies, date_obj, output_dir, font_dir)
 
     from magicinfo import upload_schedule_images
-    upload_schedule_images(saved_paths, date_obj)
+    try:
+        upload_schedule_images(saved_paths, date_obj)
+    except Exception as e:
+        logger.error("MagicINFO upload failed: %s", e)
 
     logger.info("Done.")
 
