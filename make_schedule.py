@@ -9,6 +9,8 @@ Usage:
 """
 
 import argparse
+import logging
+import os
 import re
 import time
 from datetime import datetime, timedelta
@@ -17,7 +19,10 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://kinominska.by"
 OBJECT_ID = 17
@@ -54,6 +59,26 @@ COLOR_TEXT_MUTED = (255, 255, 255)  # all text at full opacity
 COLOR_TIME_BG = (125, 105, 215)
 COLOR_TIME_BORDER = (205, 195, 245)
 COLOR_FOOTER_TEXT = (0, 0, 0)
+
+
+def setup_logging(date_obj, debug=False):
+    month_name = MONTHS_GEN[date_obj.month - 1]
+    log_filename = f"logs-{date_obj.day:02d}-{month_name}.txt"
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+
+    file_handler = logging.FileHandler(log_filename, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_formatter = logging.Formatter("%(message)s")
+    stream_handler.setFormatter(stream_formatter)
+    root_logger.addHandler(stream_handler)
 
 
 def s(value):
@@ -158,7 +183,9 @@ def get_font(size, weight="bold", font_dir=None):
         if dejavu.exists():
             return ImageFont.truetype(str(dejavu), s(size))
 
-    return ImageFont.load_default()
+    raise FileNotFoundError(
+        "No suitable font found. Please place Montserrat-Bold.ttf in the fonts folder."
+    )
 
 
 def fetch_html(session, url):
@@ -311,7 +338,7 @@ def wrap_text(draw, text, font, max_width):
             current = word
     if current:
         lines.append(current)
-    return lines if lines else [text]
+    return lines if lines or not text else [text]
 
 
 def fit_wrapped_text(draw, text, max_width, max_lines, font_path, start_size, min_size):
@@ -526,12 +553,18 @@ def generate_images(movies, date_obj, output_dir, font_dir):
     base_name = f"{date_obj.day:02d} {MONTHS_GEN[date_obj.month - 1]}"
 
     if not movies:
-        print("No movies to render.")
+        logger.info("No movies to render.")
         return []
 
-    total = min(len(movies), 2 * CARDS_PER_PAGE)
-    half = (total + 1) // 2  # ceil division, so first page gets up to one extra
-    pages = [movies[:half], movies[half:total]]
+    max_movies = 2 * CARDS_PER_PAGE
+    if len(movies) > max_movies:
+        raise ValueError(
+            f"Too many movies ({len(movies)}) to fit in {max_movies} card slots across 2 pages. "
+            f"Reduce the number of movies or increase CARDS_PER_PAGE."
+        )
+
+    half = (len(movies) + 1) // 2  # ceil division, so first page gets up to one extra
+    pages = [movies[:half], movies[half:]]
 
     # Load footer icons once
     icon_size = 64
@@ -581,7 +614,7 @@ def generate_images(movies, date_obj, output_dir, font_dir):
         out_path = Path(output_dir) / f"{base_name} {page_idx}.jpg"
         img.save(out_path, quality=95)
         saved.append(str(out_path))
-        print(f"Saved {out_path}")
+        logger.info(f"Saved {out_path}")
 
     return saved
 
@@ -631,6 +664,13 @@ def main():
     args = parser.parse_args()
 
     date_obj = args.date or (datetime.now() + timedelta(days=1)).date()
+
+    env_path = Path(".env")
+    if env_path.exists():
+        load_dotenv(env_path)
+    debug = os.getenv("MAGICINFO_DEBUG", "").strip().lower() in ("true", "1", "yes")
+    setup_logging(date_obj, debug=debug)
+
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     font_dir = Path(args.font_dir)
@@ -640,19 +680,18 @@ def main():
     session = requests.Session()
 
     schedule_url = f"{BASE_URL}/objects/{OBJECT_ID}?filter__by_date={date_obj:%Y-%m-%d}"
-    print(f"Fetching schedule: {schedule_url}")
+    logger.info(f"Fetching schedule: {schedule_url}")
     html = fetch_html(session, schedule_url)
     movies = parse_schedule(html)
-    print(f"Found {len(movies)} movies")
+    logger.info(f"Found {len(movies)} movies")
 
     if not movies:
-        print("No sessions found for this date.")
+        logger.info("No sessions found for this date.")
         return
 
-    # Enrich each movie with detail-page metadata
     for i, movie in enumerate(movies, start=1):
         detail_url = urljoin(BASE_URL, movie["href"])
-        print(f"[{i}/{len(movies)}] Fetching details: {detail_url}")
+        logger.info(f"[{i}/{len(movies)}] Fetching details: {detail_url}")
         detail_html = fetch_html(session, detail_url)
         detail = parse_movie_detail(detail_html)
         movie.update(detail)
@@ -669,7 +708,7 @@ def main():
     from magicinfo import upload_schedule_images
     upload_schedule_images(saved_paths, date_obj)
 
-    print("Done.")
+    logger.info("Done.")
 
 
 if __name__ == "__main__":

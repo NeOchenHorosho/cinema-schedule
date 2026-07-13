@@ -30,14 +30,17 @@ Copy `.env.example` to `.env`, fill in your MagicINFO credentials:
 | `MAGICINFO_ENABLED` | `true` | Set to `false` to disable |
 | `MAGICINFO_HOST` | `192.168.100.20` | MagicINFO server IP |
 | `MAGICINFO_PORT` | `7001` | MagicINFO server port |
-| `MAGICINFO_API_KEY` | — | API key from MagicINFO admin |
+| `MAGICINFO_USERNAME` | `admin` | MagicINFO login username |
+| `MAGICINFO_PASSWORD` | — | MagicINFO login password |
 | `MAGICINFO_CONTENT_GROUP` | `default` | Content group name |
 | `MAGICINFO_SCHEDULE_GROUP` | `Расписание` | Schedule group name |
 | `MAGICINFO_SCHEDULE_NAME_1` | `Расписание 1` | Name for page 1 schedule |
 | `MAGICINFO_SCHEDULE_NAME_2` | `Расписание 2` | Name for page 2 schedule |
-| `MAGICINFO_DEVICE_TYPE` | `SPLAYER` | Device type string |
-| `MAGICINFO_DEVICE_TYPE_VERSION` | `2.0` | Device type version |
+| `MAGICINFO_DEVICE_TYPE` | `LPLAYER` | Device type string |
+| `MAGICINFO_DEVICE_TYPE_VERSION` | `1.0` | Device type version |
 | `MAGICINFO_DEBUG` | `false` | Verbose API request logging |
+
+Authentication: `POST /MagicInfo/auth` with username/password returns a JWT token. The token is used as the `api_key` header for all REST API calls.
 
 The script uploads generated images, creates/updates content schedules, and deploys them for the full day. Existing schedules are updated by name (no duplicates).
 
