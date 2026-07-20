@@ -5,6 +5,7 @@ __pycache__/
 
 cache/
 *.jpg
+logs*.txt
 # C extensions
 *.so
 # Distribution / packaging

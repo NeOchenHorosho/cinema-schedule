@@ -59,7 +59,7 @@ COLOR_TEXT = (255, 255, 255)
 COLOR_TEXT_MUTED = (255, 255, 255)  # all text at full opacity
 COLOR_TIME_BG = (125, 105, 215)
 COLOR_TIME_BORDER = (205, 195, 245)
-COLOR_FOOTER_TEXT = (0, 0, 0)
+COLOR_FOOTER_TEXT = (48, 48, 48)
 
 
 def setup_logging(date_obj, debug=False):
@@ -140,6 +140,7 @@ def get_font(size, weight="bold", font_dir=None):
         "extrabold": ["Montserrat-ExtraBold.ttf", "Montserrat-Bold.ttf"],
         "bold": ["Montserrat-Bold.ttf", "Montserrat-SemiBold.ttf"],
         "semibold": ["Montserrat-SemiBold.ttf", "Montserrat-Bold.ttf"],
+        "medium": ["Montserrat-Medium.ttf", "Montserrat-SemiBold.ttf"],
     }
     candidates = weight_files.get(weight, weight_files["bold"])
 
@@ -229,24 +230,28 @@ def wrap_text(draw, text, font, max_width):
     return lines if lines or not text else [text]
 
 
-def fit_wrapped_text(draw, text, max_width, max_lines, font_path, start_size, min_size):
-    """
-    Find the largest font size <= start_size such that `text` wraps into
-    at most `max_lines` of width <= max_width. Return (font, lines).
-    """
-    for size in range(start_size, min_size - 1, -1):
-        font = ImageFont.truetype(font_path, s(size))
-        lines = wrap_text(draw, text, font, max_width)
-        if len(lines) <= max_lines:
-            return font, lines
-    # Fallback: smallest size, truncate if still too many lines
-    font = ImageFont.truetype(font_path, s(min_size))
-    lines = wrap_text(draw, text, font, max_width)[:max_lines]
-    if len(lines) == max_lines:
-        last = lines[-1]
-        if draw.textbbox((0, 0), last + "…", font=font)[2] <= max_width:
-            lines[-1] = last + "…"
-    return font, lines
+def format_duration(duration_str):
+    m = __import__("re").search(r"(\d+)", duration_str)
+    if not m:
+        return duration_str or ""
+    minutes = int(m.group(1))
+    h, mm = divmod(minutes, 60)
+    if h and mm:
+        return f"{h} ч {mm} мин"
+    if h:
+        return f"{h} ч"
+    return f"{mm} мин"
+
+
+def truncate_lines(draw, lines, max_lines, font, max_width):
+    if len(lines) <= max_lines:
+        return lines
+    lines = lines[:max_lines]
+    last = lines[-1]
+    while draw.textbbox((0, 0), last + "…", font=font)[2] > max_width:
+        last = last[:-1]
+    lines[-1] = last + "…"
+    return lines
 
 
 def draw_poster(img, x, y, poster_path, radius=16):
@@ -275,6 +280,7 @@ def font_path(weight, font_dir):
         "extrabold": ["Montserrat-ExtraBold.ttf", "Montserrat-Bold.ttf"],
         "bold": ["Montserrat-Bold.ttf", "Montserrat-SemiBold.ttf"],
         "semibold": ["Montserrat-SemiBold.ttf", "Montserrat-Bold.ttf"],
+        "medium": ["Montserrat-Medium.ttf", "Montserrat-SemiBold.ttf"],
     }
     candidates = weight_files.get(weight, weight_files["bold"])
 
@@ -334,61 +340,62 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
     # Poster
     draw_poster(img, x, y, movie.get("poster_path"))
 
-    tx = x + POSTER_W + 20
+    tx = x + POSTER_W + 30
     ty = y
 
-    # Title (uppercase, fitted, max 3 lines)
+    # Title (uppercase, fixed size 33, max 3 lines)
     title = movie.get("title", "").upper()
-    title_font, title_lines = fit_wrapped_text(
-        draw, title, s(TEXT_W), max_lines=3,
-        font_path=bold_path, start_size=38, min_size=22
-    )
+    title_font = ImageFont.truetype(bold_path, s(33))
+    title_lines = wrap_text(draw, title, title_font, s(TEXT_W))
+    title_lines = truncate_lines(draw, title_lines, 3, title_font, s(TEXT_W))
     line_height = title_font.size + s(8)
     for i, line in enumerate(title_lines):
         draw.text((s(tx), s(ty) + i * line_height), line,
                   fill=COLOR_TEXT, font=title_font)
 
-    # Meta lines (genre, country, age+duration) with decreasing sizes
+    # Meta lines (genre, country, age+duration) — all at size 16
     title_h = len(title_lines) * line_height
     meta_y = s(ty) + title_h + s(12)
 
+    meta_font = ImageFont.truetype(semibold_path, s(16))
+    meta_line_h = meta_font.size + s(5)
+
+    # Genres
     genre_line = " • ".join(g.upper() for g in movie.get("genres", [])[:3])
-    country_line = movie.get("country", "").upper()
+    if genre_line:
+        genre_lines = wrap_text(draw, genre_line, meta_font, s(TEXT_W))
+        genre_lines = truncate_lines(draw, genre_lines, 2, meta_font, s(TEXT_W))
+        for i, line in enumerate(genre_lines):
+            draw.text((s(tx), meta_y + i * meta_line_h), line,
+                      fill=COLOR_TEXT, font=meta_font)
+        meta_y += len(genre_lines) * meta_line_h
+
+    # Countries (split by comma, join with dots, like genres)
+    country_str = movie.get("country", "")
+    if country_str:
+        country_parts = [c.strip().upper() for c in country_str.split(",") if c.strip()]
+        country_line = " • ".join(country_parts)
+    else:
+        country_line = ""
+    if country_line:
+        country_lines = wrap_text(draw, country_line, meta_font, s(TEXT_W))
+        country_lines = truncate_lines(draw, country_lines, 2, meta_font, s(TEXT_W))
+        for i, line in enumerate(country_lines):
+            draw.text((s(tx), meta_y + i * meta_line_h), line,
+                      fill=COLOR_TEXT, font=meta_font)
+        meta_y += len(country_lines) * meta_line_h
+
+    # Age + duration
     age = movie.get("age", "")
-    duration = movie.get("duration", "")
+    duration = format_duration(movie.get("duration", ""))
     info_line = f"{age} • {duration}".strip(" •")
-
-    # Genre (smaller than title)
-    genre_font, genre_lines = fit_wrapped_text(
-        draw, genre_line, s(TEXT_W), max_lines=2,
-        font_path=semibold_path, start_size=21, min_size=16
-    )
-    genre_line_height = genre_font.size + s(5)
-    for i, line in enumerate(genre_lines):
-        draw.text((s(tx), meta_y + i * genre_line_height), line,
-                  fill=COLOR_TEXT, font=genre_font)
-
-    # Country (same size as genre)
-    meta_y += len(genre_lines) * genre_line_height
-    country_font, country_lines = fit_wrapped_text(
-        draw, country_line, s(TEXT_W), max_lines=2,
-        font_path=semibold_path, start_size=21, min_size=16
-    )
-    country_line_height = country_font.size + s(5)
-    for i, line in enumerate(country_lines):
-        draw.text((s(tx), meta_y + i * country_line_height), line,
-                  fill=COLOR_TEXT, font=country_font)
-
-    # Age + duration (smaller than genre)
-    meta_y += len(country_lines) * country_line_height
-    info_font, info_lines = fit_wrapped_text(
-        draw, info_line, s(TEXT_W), max_lines=2,
-        font_path=semibold_path, start_size=19, min_size=15
-    )
-    info_line_height = info_font.size + s(5)
-    for i, line in enumerate(info_lines):
-        draw.text((s(tx), meta_y + i * info_line_height), line,
-                  fill=COLOR_TEXT, font=info_font)
+    if info_line:
+        info_lines = wrap_text(draw, info_line, meta_font, s(TEXT_W))
+        info_lines = truncate_lines(draw, info_lines, 2, meta_font, s(TEXT_W))
+        for i, line in enumerate(info_lines):
+            draw.text((s(tx), meta_y + i * meta_line_h), line,
+                      fill=COLOR_TEXT, font=meta_font)
+        meta_y += len(info_lines) * meta_line_h
 
     # Session time buttons placed right after the meta text (top to bottom)
     sessions = sorted(movie.get("sessions", []), key=lambda s: s.get("time", ""))
@@ -396,7 +403,7 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
     button_h = 46
     button_gap_x = 12
     button_gap_y = 36
-    session_top = (meta_y + len(info_lines) * info_line_height) // SCALE + 24
+    session_top = meta_y // SCALE + 24
 
     sy = session_top
     sx = tx
@@ -431,11 +438,11 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
 
 def generate_images(movies, date_obj, output_dir, font_dir):
     """Render schedule images with supersampling, splitting into pages if needed."""
-    title_font = get_font(92, weight="extrabold", font_dir=font_dir)
-    date_font = get_font(72, weight="bold", font_dir=font_dir)
-    time_font = get_font(22, weight="bold", font_dir=font_dir)
-    hall_font = get_font(17, weight="semibold", font_dir=font_dir)
-    footer_font = get_font(42, weight="bold", font_dir=font_dir)
+    title_font = get_font(80, weight="extrabold", font_dir=font_dir)
+    date_font = get_font(60, weight="bold", font_dir=font_dir)
+    time_font = get_font(23, weight="bold", font_dir=font_dir)
+    hall_font = get_font(14, weight="bold", font_dir=font_dir)
+    footer_font = get_font(54, weight="medium", font_dir=font_dir)
     card_fonts = (time_font, hall_font)
 
     date_label = f"{date_obj.day} {MONTHS_GEN[date_obj.month - 1].upper()}"
@@ -456,9 +463,10 @@ def generate_images(movies, date_obj, output_dir, font_dir):
     pages = [movies[:half], movies[half:]]
 
     # Load footer icons once
-    icon_size = 64
-    instagram_icon = load_icon("instagram.png", icon_size)
-    globe_icon = load_icon("globe.png", icon_size)
+    insta_icon_size = 120
+    globe_icon_size = 80
+    instagram_icon = load_icon("instagram.png", insta_icon_size)
+    globe_icon = load_icon("globe.png", globe_icon_size)
 
     saved = []
     for page_idx, page in enumerate(pages, start=1):
@@ -479,29 +487,38 @@ def generate_images(movies, date_obj, output_dir, font_dir):
             y = MARGIN_TOP + HEADER_H + row * (POSTER_H + CARD_GAP_Y)
             draw_card(draw, img, movie, x, y, card_fonts, font_dir)
 
-        # Footer
+        # Footer — centered with equal margins
+        footer_y = s(IMG_H - 80)
         icon_gap = 14
-        footer_y = s(IMG_H - 65)
+        block_gap = 60
+
+        insta_text = "@kinoteatr_moskva"
+        website_text = "kinominska.by"
+        insta_text_w = draw.textbbox((0, 0), insta_text, font=footer_font)[2]
+        website_text_w = draw.textbbox((0, 0), website_text, font=footer_font)[2]
+
+        left_block_w = s(insta_icon_size) + s(icon_gap) + insta_text_w
+        right_block_w = s(globe_icon_size) + s(icon_gap) + website_text_w
+        total_w = left_block_w + s(block_gap) + right_block_w
+        start_x = (s(IMG_W) - total_w) // 2
 
         # Instagram icon + handle
-        insta_x = s(80)
-        img.paste(instagram_icon, (insta_x, footer_y - s(icon_size) // 2), instagram_icon)
-        draw.text((insta_x + s(icon_size) + s(icon_gap), footer_y), "@kinoteatr_moskva",
+        insta_x = start_x
+        img.paste(instagram_icon, (insta_x, footer_y - s(insta_icon_size) // 2), instagram_icon)
+        draw.text((insta_x + s(insta_icon_size) + s(icon_gap), footer_y), insta_text,
                   fill=COLOR_FOOTER_TEXT, font=footer_font, anchor="lm")
 
         # Globe icon + website
-        website_text_width = draw.textbbox((0, 0), "kinominska.by", font=footer_font)[2]
-        text_x = s(IMG_W - 80)
-        draw.text((text_x, footer_y), "kinominska.by",
-                  fill=COLOR_FOOTER_TEXT, font=footer_font, anchor="rm")
-        globe_x = text_x - website_text_width - s(icon_gap) - s(icon_size)
-        img.paste(globe_icon, (globe_x, footer_y - s(icon_size) // 2), globe_icon)
+        globe_x = start_x + left_block_w + s(block_gap)
+        img.paste(globe_icon, (globe_x, footer_y - s(globe_icon_size) // 2), globe_icon)
+        draw.text((globe_x + s(globe_icon_size) + s(icon_gap), footer_y), website_text,
+                  fill=COLOR_FOOTER_TEXT, font=footer_font, anchor="lm")
 
         # Downsample to final size for smooth edges
         img = img.resize((IMG_W, IMG_H), Image.Resampling.LANCZOS)
 
         out_path = Path(output_dir) / f"{base_name} {page_idx}.jpg"
-        img.save(out_path, quality=95)
+        img.save(out_path, quality=100, subsampling=0)
         saved.append(str(out_path))
         logger.info(f"Saved {out_path}")
 
