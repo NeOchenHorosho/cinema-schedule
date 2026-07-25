@@ -5,8 +5,8 @@ Generates cinema schedule images for [kinominska.by](https://kinominska.by/objec
 ## Quick start
 
 ```
-pip install -r requirements.txt
-python make_schedule.py
+uv sync
+uv run make_schedule.py
 ```
 
 Generates tomorrow's schedule as two 1440×2560 JPG images in the current directory.

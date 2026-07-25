@@ -3,7 +3,7 @@
 import json
 import re
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
@@ -74,13 +74,15 @@ class BycardParser(BaseParser):
                     continue
 
                 sid_match = re.search(r"sid=(\d+)", item.get("@id", ""))
-                events.append({
-                    "name": item.get("name", ""),
-                    "image": item.get("image"),
-                    "startDate": start_date,
-                    "detail_url": self._clean_detail_url(item.get("url", "")),
-                    "sid": int(sid_match.group(1)) if sid_match else None,
-                })
+                events.append(
+                    {
+                        "name": item.get("name", ""),
+                        "image": item.get("image"),
+                        "startDate": start_date,
+                        "detail_url": self._clean_detail_url(item.get("url", "")),
+                        "sid": int(sid_match.group(1)) if sid_match else None,
+                    }
+                )
 
         return events
 

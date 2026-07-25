@@ -13,7 +13,9 @@ OBJECT_ID = 17
 
 class KinominskaParser(BaseParser):
     def fetch_schedule(self, session, date_obj):
-        schedule_url = f"{BASE_URL}/objects/{OBJECT_ID}?filter__by_date={date_obj:%Y-%m-%d}"
+        schedule_url = (
+            f"{BASE_URL}/objects/{OBJECT_ID}?filter__by_date={date_obj:%Y-%m-%d}"
+        )
         html = self._fetch_html(session, schedule_url)
         return self._parse_schedule(html)
 
@@ -59,13 +61,15 @@ class KinominskaParser(BaseParser):
                     sessions.append({"time": time_str, "hall": hall})
 
                 if sessions:
-                    movies.append({
-                        "title": title,
-                        "slug": slug,
-                        "href": href,
-                        "sessions": sessions,
-                        "poster_url": None,
-                    })
+                    movies.append(
+                        {
+                            "title": title,
+                            "slug": slug,
+                            "href": href,
+                            "sessions": sessions,
+                            "poster_url": None,
+                        }
+                    )
                 current_head = None
 
         return movies
@@ -92,7 +96,9 @@ class KinominskaParser(BaseParser):
                 poster_url = urljoin(BASE_URL, poster_url)
         data["poster_url"] = poster_url
 
-        genres = [g.get_text(strip=True) for g in soup.select(".movie-tag li.trending-list a")]
+        genres = [
+            g.get_text(strip=True) for g in soup.select(".movie-tag li.trending-list a")
+        ]
         data["genres"] = genres
 
         badge = soup.select_one(".text-detail .badge.bg-secondary")

@@ -60,7 +60,11 @@ class MagicInfoClient:
         resp = requests.post(
             f"{self._base}/restapi/v2.0/auth",
             headers={"Content-Type": "application/json"},
-            json={"username": self._username, "password": self._password, "grantType": "password"},
+            json={
+                "username": self._username,
+                "password": self._password,
+                "grantType": "password",
+            },
             timeout=30,
         )
         if not resp.ok:
@@ -75,7 +79,16 @@ class MagicInfoClient:
             )
         self._token = token
 
-    def _request(self, method, path, params=None, json_body=None, data=None, files=None, timeout=30):
+    def _request(
+        self,
+        method,
+        path,
+        params=None,
+        json_body=None,
+        data=None,
+        files=None,
+        timeout=30,
+    ):
         if self._token is None:
             self._authenticate()
 
@@ -92,17 +105,28 @@ class MagicInfoClient:
             logger.debug("[DEBUG]   body:   %s", body_str)
         if data:
             safe_data = {k: v for k, v in data.items()}
-            logger.debug("[DEBUG]   data:   %s", json.dumps(safe_data, ensure_ascii=False))
+            logger.debug(
+                "[DEBUG]   data:   %s", json.dumps(safe_data, ensure_ascii=False)
+            )
         if files:
             logger.debug("[DEBUG]   files:  %s", list(files.keys()))
 
         r = requests.request(
-            method, url, headers=headers,
-            params=params, json=json_body, data=data, files=files,
+            method,
+            url,
+            headers=headers,
+            params=params,
+            json=json_body,
+            data=data,
+            files=files,
             timeout=timeout,
         )
 
-        logger.debug("[DEBUG]   status: %s  content-type: %s", r.status_code, r.headers.get("Content-Type", ""))
+        logger.debug(
+            "[DEBUG]   status: %s  content-type: %s",
+            r.status_code,
+            r.headers.get("Content-Type", ""),
+        )
         raw = r.text[:2000]
         if raw:
             logger.debug("[DEBUG]   raw:     %s", raw)
@@ -111,7 +135,13 @@ class MagicInfoClient:
             body = r.json()
         except ValueError:
             if not r.ok:
-                logger.error("[ERROR] %s %s  HTTP %s: %s", method, url, r.status_code, r.text[:500])
+                logger.error(
+                    "[ERROR] %s %s  HTTP %s: %s",
+                    method,
+                    url,
+                    r.status_code,
+                    r.text[:500],
+                )
                 r.raise_for_status()
             raise MagicInfoError(
                 f"Expected JSON response but got empty body or non-JSON content.\n"
@@ -130,10 +160,12 @@ class MagicInfoClient:
             )
 
         if not r.ok:
-            err_body = json.dumps(body, ensure_ascii=False, default=str)[:500] if body else "empty"
-            raise MagicInfoError(
-                f"HTTP {r.status_code} on {method} {url}:\n{err_body}"
+            err_body = (
+                json.dumps(body, ensure_ascii=False, default=str)[:500]
+                if body
+                else "empty"
             )
+            raise MagicInfoError(f"HTTP {r.status_code} on {method} {url}:\n{err_body}")
 
         return body
 
@@ -141,7 +173,9 @@ class MagicInfoClient:
         return self._request("GET", path, params=params)
 
     def _post(self, path, json_body=None, data=None, files=None):
-        return self._request("POST", path, json_body=json_body, data=data, files=files, timeout=60)
+        return self._request(
+            "POST", path, json_body=json_body, data=data, files=files, timeout=60
+        )
 
     def _put(self, path, json_body=None):
         return self._request("PUT", path, json_body=json_body)
@@ -245,13 +279,18 @@ class MagicInfoClient:
         return resp.get("items", {})
 
     def _update_program(self, program_id, program_data):
-        self._put(f"/restapi/v2.0/dms/content-schedules/{program_id}", json_body=program_data)
+        self._put(
+            f"/restapi/v2.0/dms/content-schedules/{program_id}", json_body=program_data
+        )
 
     def _republish(self, program_id, device_group_id=None):
         ids = {"ids": []}
         if device_group_id:
             ids["ids"] = [device_group_id]
-        self._put(f"/restapi/v2.0/dms/content-schedules/{program_id}/re-publish", json_body=ids)
+        self._put(
+            f"/restapi/v2.0/dms/content-schedules/{program_id}/re-publish",
+            json_body=ids,
+        )
 
     def _replace_event_for_date(self, program_data, date_str, content_id, content_name):
         channels = program_data.get("channels")
@@ -276,27 +315,29 @@ class MagicInfoClient:
 
         events = frame.get("events", [])
         events = [e for e in events if e.get("startDate") != date_str]
-        events.append({
-            "scheduleType": "00",
-            "isSafetyLockSet": False,
-            "isInfinitePlay": False,
-            "startDate": date_str,
-            "endDate": date_str,
-            "startTime": "00:00:00",
-            "durationInSeconds": 86399,
-            "repeatType": "ONCE",
-            "isAllDayPlay": True,
-            "frameId": frame_id,
-            "contentId": content_id,
-            "contentName": content_name,
-            "contentType": "IMAGE",
-            "fileSize": 0,
-            "playerMode": "single",
-            "color": "#80cbff",
-            "cifsSlideTransitionTime": 0,
-            "isHW": False,
-            "priority": len(events) + 1,
-        })
+        events.append(
+            {
+                "scheduleType": "00",
+                "isSafetyLockSet": False,
+                "isInfinitePlay": False,
+                "startDate": date_str,
+                "endDate": date_str,
+                "startTime": "00:00:00",
+                "durationInSeconds": 86399,
+                "repeatType": "ONCE",
+                "isAllDayPlay": True,
+                "frameId": frame_id,
+                "contentId": content_id,
+                "contentName": content_name,
+                "contentType": "IMAGE",
+                "fileSize": 0,
+                "playerMode": "single",
+                "color": "#80cbff",
+                "cifsSlideTransitionTime": 0,
+                "isHW": False,
+                "priority": len(events) + 1,
+            }
+        )
         frame["events"] = events
 
     def upload_and_schedule(self, image_path_1, image_path_2, date_obj):
@@ -309,8 +350,14 @@ class MagicInfoClient:
         logger.info("--- MagicINFO: resolving groups ---")
         content_group_id = self._resolve_content_group_id()
         schedule_group_id = self._resolve_schedule_group_id()
-        logger.info("  Content group '%s' -> ID: %s", self._content_group_name, content_group_id)
-        logger.info("  Schedule group '%s' -> ID: %s", self._schedule_group_name, schedule_group_id)
+        logger.info(
+            "  Content group '%s' -> ID: %s", self._content_group_name, content_group_id
+        )
+        logger.info(
+            "  Schedule group '%s' -> ID: %s",
+            self._schedule_group_name,
+            schedule_group_id,
+        )
 
         logger.info("--- MagicINFO: uploading images ---")
         content_id_1 = self._upload_image(image_path_1, content_group_id)
@@ -319,8 +366,18 @@ class MagicInfoClient:
         logger.info("  Uploaded '%s' -> contentId=%s", image_path_2, content_id_2)
 
         images = [
-            (content_id_1, self._schedule_name_1, Path(image_path_1).stem, self._device_group_id_1),
-            (content_id_2, self._schedule_name_2, Path(image_path_2).stem, self._device_group_id_2),
+            (
+                content_id_1,
+                self._schedule_name_1,
+                Path(image_path_1).stem,
+                self._device_group_id_1,
+            ),
+            (
+                content_id_2,
+                self._schedule_name_2,
+                Path(image_path_2).stem,
+                self._device_group_id_2,
+            ),
         ]
 
         logger.info("--- MagicINFO: scheduling ---")
@@ -358,7 +415,9 @@ def upload_schedule_images(image_paths, date_obj):
         return
 
     if len(image_paths) < 2:
-        logger.warning("Expected 2 images for upload, got %d. Skipping upload.", len(image_paths))
+        logger.warning(
+            "Expected 2 images for upload, got %d. Skipping upload.", len(image_paths)
+        )
         return
 
     client = MagicInfoClient(config)

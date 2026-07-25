@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Generate cinema schedule images from supported cinema schedule sources.
 
@@ -30,8 +29,18 @@ logger = logging.getLogger(__name__)
 
 # Genitive month names used in the date label, e.g. "27 Июня"
 MONTHS_GEN = [
-    "Января", "Февраля", "Марта", "Апреля", "Мая", "Июня",
-    "Июля", "Августа", "Сентября", "Октября", "Ноября", "Декабря",
+    "Января",
+    "Февраля",
+    "Марта",
+    "Апреля",
+    "Мая",
+    "Июня",
+    "Июля",
+    "Августа",
+    "Сентября",
+    "Октября",
+    "Ноября",
+    "Декабря",
 ]
 
 # Supersampling scale: render at 2x then downscale for smooth edges
@@ -52,9 +61,9 @@ TEXT_W = COL_W - POSTER_W - 55  # right-side padding inside the card
 CARDS_PER_PAGE = 10  # 2 columns x 5 rows
 
 # Colors sampled from the original images
-COLOR_TOP = (47, 40, 118)        # dark purple
-COLOR_MIDDLE = (47, 112, 154)    # teal
-COLOR_BOTTOM = (49, 186, 196)    # cyan/teal
+COLOR_TOP = (47, 40, 118)  # dark purple
+COLOR_MIDDLE = (47, 112, 154)  # teal
+COLOR_BOTTOM = (49, 186, 196)  # cyan/teal
 COLOR_TEXT = (255, 255, 255)
 COLOR_TEXT_MUTED = (255, 255, 255)  # all text at full opacity
 COLOR_TIME_BG = (125, 105, 215)
@@ -71,7 +80,9 @@ def setup_logging(date_obj, debug=False):
 
     file_handler = logging.FileHandler(log_filename, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    file_formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    )
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
 
@@ -90,6 +101,7 @@ def s(value):
 def create_gradient(width, height, top, middle, bottom):
     """Create a radial gradient from bottom-left corner at supersampled size."""
     import math
+
     w, h = s(width), s(height)
     max_dist = math.sqrt(w * w + h * h)
 
@@ -129,8 +141,9 @@ def rounded_rectangle_mask(size, radius):
     """Return an L-mode mask with rounded corners at supersampled size."""
     mask = Image.new("L", (s(size[0]), s(size[1])), 0)
     draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle([(0, 0), (s(size[0]), s(size[1]))],
-                           radius=s(radius), fill=255)
+    draw.rounded_rectangle(
+        [(0, 0), (s(size[0]), s(size[1]))], radius=s(radius), fill=255
+    )
     return mask
 
 
@@ -154,12 +167,24 @@ def get_font(size, weight="bold", font_dir=None):
     # Windows system fonts
     windows_fonts = Path("C:/Windows/Fonts")
     win_candidates = {
-        "extrabold": ["Montserrat-ExtraBold.ttf", "Montserrat-Bold.ttf",
-                      "arialbd.ttf", "Arial Bold.ttf"],
-        "bold": ["Montserrat-Bold.ttf", "Montserrat-SemiBold.ttf",
-                 "arialbd.ttf", "Arial Bold.ttf"],
-        "semibold": ["Montserrat-SemiBold.ttf", "Montserrat-Bold.ttf",
-                      "arial.ttf", "Arial.ttf"],
+        "extrabold": [
+            "Montserrat-ExtraBold.ttf",
+            "Montserrat-Bold.ttf",
+            "arialbd.ttf",
+            "Arial Bold.ttf",
+        ],
+        "bold": [
+            "Montserrat-Bold.ttf",
+            "Montserrat-SemiBold.ttf",
+            "arialbd.ttf",
+            "Arial Bold.ttf",
+        ],
+        "semibold": [
+            "Montserrat-SemiBold.ttf",
+            "Montserrat-Bold.ttf",
+            "arial.ttf",
+            "Arial.ttf",
+        ],
     }
     win_list = win_candidates.get(weight, win_candidates["bold"])
     for name in win_list:
@@ -292,12 +317,24 @@ def font_path(weight, font_dir):
 
     windows_fonts = Path("C:/Windows/Fonts")
     win_map = {
-        "extrabold": ["Montserrat-ExtraBold.ttf", "Montserrat-Bold.ttf",
-                      "arialbd.ttf", "Arial Bold.ttf"],
-        "bold": ["Montserrat-Bold.ttf", "Montserrat-SemiBold.ttf",
-                 "arialbd.ttf", "Arial Bold.ttf"],
-        "semibold": ["Montserrat-SemiBold.ttf", "Montserrat-Bold.ttf",
-                     "arialbd.ttf", "Arial Bold.ttf"],
+        "extrabold": [
+            "Montserrat-ExtraBold.ttf",
+            "Montserrat-Bold.ttf",
+            "arialbd.ttf",
+            "Arial Bold.ttf",
+        ],
+        "bold": [
+            "Montserrat-Bold.ttf",
+            "Montserrat-SemiBold.ttf",
+            "arialbd.ttf",
+            "Arial Bold.ttf",
+        ],
+        "semibold": [
+            "Montserrat-SemiBold.ttf",
+            "Montserrat-Bold.ttf",
+            "arialbd.ttf",
+            "Arial Bold.ttf",
+        ],
     }
     for name in win_map.get(weight, win_map["bold"]):
         path = windows_fonts / name
@@ -321,7 +358,9 @@ def font_path(weight, font_dir):
         if dejavu.exists():
             return str(dejavu)
 
-    raise FileNotFoundError("No suitable font found. Please place Montserrat-Bold.ttf in the fonts folder.")
+    raise FileNotFoundError(
+        "No suitable font found. Please place Montserrat-Bold.ttf in the fonts folder."
+    )
 
 
 def load_icon(path, size):
@@ -350,8 +389,9 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
     title_lines = truncate_lines(draw, title_lines, 3, title_font, s(TEXT_W))
     line_height = title_font.size + s(8)
     for i, line in enumerate(title_lines):
-        draw.text((s(tx), s(ty) + i * line_height), line,
-                  fill=COLOR_TEXT, font=title_font)
+        draw.text(
+            (s(tx), s(ty) + i * line_height), line, fill=COLOR_TEXT, font=title_font
+        )
 
     # Meta lines (genre, country, age+duration) — all at size 16
     title_h = len(title_lines) * line_height
@@ -366,8 +406,9 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
         genre_lines = wrap_text(draw, genre_line, meta_font, s(TEXT_W))
         genre_lines = truncate_lines(draw, genre_lines, 2, meta_font, s(TEXT_W))
         for i, line in enumerate(genre_lines):
-            draw.text((s(tx), meta_y + i * meta_line_h), line,
-                      fill=COLOR_TEXT, font=meta_font)
+            draw.text(
+                (s(tx), meta_y + i * meta_line_h), line, fill=COLOR_TEXT, font=meta_font
+            )
         meta_y += len(genre_lines) * meta_line_h
 
     # Countries (split by comma, join with dots, like genres)
@@ -381,8 +422,9 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
         country_lines = wrap_text(draw, country_line, meta_font, s(TEXT_W))
         country_lines = truncate_lines(draw, country_lines, 2, meta_font, s(TEXT_W))
         for i, line in enumerate(country_lines):
-            draw.text((s(tx), meta_y + i * meta_line_h), line,
-                      fill=COLOR_TEXT, font=meta_font)
+            draw.text(
+                (s(tx), meta_y + i * meta_line_h), line, fill=COLOR_TEXT, font=meta_font
+            )
         meta_y += len(country_lines) * meta_line_h
 
     # Age + duration
@@ -393,8 +435,9 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
         info_lines = wrap_text(draw, info_line, meta_font, s(TEXT_W))
         info_lines = truncate_lines(draw, info_lines, 2, meta_font, s(TEXT_W))
         for i, line in enumerate(info_lines):
-            draw.text((s(tx), meta_y + i * meta_line_h), line,
-                      fill=COLOR_TEXT, font=meta_font)
+            draw.text(
+                (s(tx), meta_y + i * meta_line_h), line, fill=COLOR_TEXT, font=meta_font
+            )
         meta_y += len(info_lines) * meta_line_h
 
     # Session time buttons placed right after the meta text (top to bottom)
@@ -419,8 +462,13 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
         # Hall label above the button
         if hall:
             label = f"Зал №{hall}"
-            draw.text((s(sx + button_w // 2), s(sy) - s(3)), label,
-                      fill=COLOR_TEXT, font=hall_font, anchor="mb")
+            draw.text(
+                (s(sx + button_w // 2), s(sy) - s(3)),
+                label,
+                fill=COLOR_TEXT,
+                font=hall_font,
+                anchor="mb",
+            )
 
         # Rounded button
         draw.rounded_rectangle(
@@ -430,8 +478,13 @@ def draw_card(draw, img, movie, x, y, fonts, font_dir):
             outline=COLOR_TIME_BORDER,
             width=s(2),
         )
-        draw.text((s(sx + button_w // 2), s(sy + button_h // 2)), time_str,
-                  fill=COLOR_TEXT, font=time_font, anchor="mm")
+        draw.text(
+            (s(sx + button_w // 2), s(sy + button_h // 2)),
+            time_str,
+            fill=COLOR_TEXT,
+            font=time_font,
+            anchor="mm",
+        )
 
         sx += button_w + button_gap_x
 
@@ -474,10 +527,20 @@ def generate_images(movies, date_obj, output_dir, font_dir):
         draw = ImageDraw.Draw(img)
 
         # Header
-        draw.text((s(IMG_W // 2), s(70)), "РАСПИСАНИЕ СЕАНСОВ",
-                  fill=COLOR_TEXT, font=title_font, anchor="mt")
-        draw.text((s(IMG_W // 2), s(180)), date_label,
-                  fill=COLOR_TEXT, font=date_font, anchor="mt")
+        draw.text(
+            (s(IMG_W // 2), s(70)),
+            "РАСПИСАНИЕ СЕАНСОВ",
+            fill=COLOR_TEXT,
+            font=title_font,
+            anchor="mt",
+        )
+        draw.text(
+            (s(IMG_W // 2), s(180)),
+            date_label,
+            fill=COLOR_TEXT,
+            font=date_font,
+            anchor="mt",
+        )
 
         # Cards
         for i, movie in enumerate(page):
@@ -504,15 +567,29 @@ def generate_images(movies, date_obj, output_dir, font_dir):
 
         # Instagram icon + handle
         insta_x = start_x
-        img.paste(instagram_icon, (insta_x, footer_y - s(insta_icon_size) // 2), instagram_icon)
-        draw.text((insta_x + s(insta_icon_size) + s(icon_gap), footer_y), insta_text,
-                  fill=COLOR_FOOTER_TEXT, font=footer_font, anchor="lm")
+        img.paste(
+            instagram_icon,
+            (insta_x, footer_y - s(insta_icon_size) // 2),
+            instagram_icon,
+        )
+        draw.text(
+            (insta_x + s(insta_icon_size) + s(icon_gap), footer_y),
+            insta_text,
+            fill=COLOR_FOOTER_TEXT,
+            font=footer_font,
+            anchor="lm",
+        )
 
         # Globe icon + website
         globe_x = start_x + left_block_w + s(block_gap)
         img.paste(globe_icon, (globe_x, footer_y - s(globe_icon_size) // 2), globe_icon)
-        draw.text((globe_x + s(globe_icon_size) + s(icon_gap), footer_y), website_text,
-                  fill=COLOR_FOOTER_TEXT, font=footer_font, anchor="lm")
+        draw.text(
+            (globe_x + s(globe_icon_size) + s(icon_gap), footer_y),
+            website_text,
+            fill=COLOR_FOOTER_TEXT,
+            font=footer_font,
+            anchor="lm",
+        )
 
         # Downsample to final size for smooth edges
         img = img.resize((IMG_W, IMG_H), Image.Resampling.LANCZOS)
@@ -610,7 +687,9 @@ def main():
                 poster_path = download_poster(session, poster_url, cache_dir)
                 movie["poster_path"] = poster_path
             except Exception as e:
-                logger.warning("Failed to download poster for '%s': %s", movie["title"], e)
+                logger.warning(
+                    "Failed to download poster for '%s': %s", movie["title"], e
+                )
 
         if i < len(movies):
             time.sleep(args.delay)
@@ -618,6 +697,7 @@ def main():
     saved_paths = generate_images(movies, date_obj, output_dir, font_dir)
 
     from magicinfo import upload_schedule_images
+
     try:
         upload_schedule_images(saved_paths, date_obj)
     except Exception as e:
