@@ -4,8 +4,13 @@ stages:
 variables:
   UV_CACHE_DIR: .uv-cache
   UV_CACHE_POLICY: pull
+  UV_VERSION: "0.11.32"
+  PYTHON_VERSION: "3.12"
+  BASE_LAYER: trixie-slim
+  UV_LINK_MODE: copy
 
 default:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
   cache:
     - key:
         files:
