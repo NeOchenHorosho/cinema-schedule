@@ -1,5 +1,6 @@
 # cinema-schedule
 [![CI status](https://gitlab.com/csavss677/cinema-schedule/badges/main/pipeline.svg)](https://gitlab.com/csavss677/cinema-schedule)
+
 Generates cinema schedule images for [kinominska.by](https://kinominska.by/objects/17) and uploads them to Samsung MagicINFO digital signage.
 
 ## Quick start
