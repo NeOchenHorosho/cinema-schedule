@@ -38,11 +38,11 @@ uv-lock-check:
 pytest:
   stage: test
   script:
-    - uvx pytest
+    - uv run pytest
 
 create-schedule:
   stage: test
   script:
     - uv run make_schedule.py
-    - file -f *1.jpg
-    - file -f *2.jpg
+    - test *1.jpg
+    - test *2.jpg
